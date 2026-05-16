@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
   darkMode: ["class"],
   content: [
     './pages/**/*.{ts,tsx}',
@@ -18,16 +18,16 @@ export default {
     extend: {
       colors: {
         border: "hsl(var(--border))",
-  	input: "hsl(var(--input))",
-  	ring: "hsl(var(--ring))",
-  	background: "hsl(var(--background))",
-  	foreground: "hsl(var(--foreground))",
-  	warning: "hsl(var(--warning))",          // ADD THIS
-  	"chart-1": "hsl(var(--chart-1))",        // ADD THIS
-  	"chart-2": "hsl(var(--chart-2))",        // ADD THIS
-  	"chart-3": "hsl(var(--chart-3))",        // ADD THIS
-  	"chart-4": "hsl(var(--chart-4))",        // ADD THIS
-	"chart-5": "hsl(var(--chart-5))",        // ADD THIS
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        warning: "hsl(var(--warning))",
+        "chart-1": "hsl(var(--chart-1))",
+        "chart-2": "hsl(var(--chart-2))",
+        "chart-3": "hsl(var(--chart-3))",
+        "chart-4": "hsl(var(--chart-4))",
+	"chart-5": "hsl(var(--chart-5))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",

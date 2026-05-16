@@ -1,18 +1,17 @@
 import { create } from 'zustand'
-import { supabase } from '@/lib/supabase'
-import type { User } from '@supabase/supabase-js'
+
+export interface User {
+  id: string
+  email: string
+  full_name: string
+}
 
 export interface Profile {
   id: string
-  full_name: string
   email: string
-  avatar_url?: string
+  full_name: string
   role: 'submitter' | 'approver' | 'manager' | 'admin'
   department?: string
-  manager_id?: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
 }
 
 interface AuthStore {
@@ -23,48 +22,32 @@ interface AuthStore {
   setProfile: (profile: Profile | null) => void
   setLoading: (loading: boolean) => void
   signOut: () => Promise<void>
-  fetchProfile: (userId: string) => Promise<void>
+  signIn: (email: string, password: string) => Promise<void>
+  signUp: (email: string, password: string) => Promise<void>
 }
 
-export const useAuthStore = create<AuthStore>((set, get) => ({
+export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   profile: null,
   loading: true,
   
   setUser: (user) => set({ user }),
-  
   setProfile: (profile) => set({ profile }),
-  
   setLoading: (loading) => set({ loading }),
   
-  fetchProfile: async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    
-    if (!error && data) {
-      set({ profile: data })
-    }
+  signIn: async (email: string, password: string) => {
+    // Azure AD handles this via popup/redirect
+    console.log('Sign in with Azure AD')
+  },
+  
+  signUp: async (email: string, password: string) => {
+    console.log('Sign up with Azure AD')
   },
   
   signOut: async () => {
-    await supabase.auth.signOut()
+    // Clear local state
     set({ user: null, profile: null })
+    // Redirect to home
+    window.location.href = '/'
   },
 }))
-
-// Initialize auth listener
-supabase.auth.onAuthStateChange(async (event, session) => {
-  const { setUser, setProfile, fetchProfile, setLoading } = useAuthStore.getState()
-  
-  if (session?.user) {
-    setUser(session.user)
-    await fetchProfile(session.user.id)
-  } else {
-    setUser(null)
-    setProfile(null)
-  }
-  setLoading(false)
-})

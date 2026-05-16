@@ -81,7 +81,7 @@ export default function Dashboard() {
 
     try {
       const { data: requests, error: reqError } = await supabase
-        .from('requests')
+        .from('funding_requests')
         .select(`
           *,
           legal_entity:legal_entities(name, code)
@@ -91,29 +91,29 @@ export default function Dashboard() {
       if (reqError) throw reqError
 
       const totalRequests = requests?.length || 0
-      const approvedCount = requests?.filter(r => r.status === 'approved').length || 0
-      const pendingCount = requests?.filter(r => r.status === 'in_review').length || 0
-      const returnedCount = requests?.filter(r => r.status === 'returned').length || 0
-      const rejectedCount = requests?.filter(r => r.status === 'rejected').length || 0
+      const approvedCount = requests?.filter(r => r.status === 'Approved').length || 0
+      const pendingCount = requests?.filter(r => r.status === 'Pending').length || 0
+      const returnedCount = requests?.filter(r => r.status === 'Returned').length || 0
+      const rejectedCount = requests?.filter(r => r.status === 'Rejected').length || 0
 
-      const totalAmount = requests?.reduce((sum, r) => sum + (r.total_amount || 0), 0) || 0
+      const totalAmount = requests?.reduce((sum, r) => sum + (r.amount || 0), 0) || 0
       const approvedAmount = requests?.reduce((sum, r) =>
-        r.status === 'approved' ? sum + (r.total_amount || 0) : sum, 0
+        r.status === 'Approved' ? sum + (r.amount || 0) : sum, 0
       ) || 0
       const pendingAmount = requests?.reduce((sum, r) =>
-        r.status === 'in_review' ? sum + (r.total_amount || 0) : sum, 0
+        r.status === 'Pending' ? sum + (r.amount || 0) : sum, 0
       ) || 0
 
       const capexAmount = requests?.reduce((sum, r) =>
-        r.category === 'procurement' ? sum + (r.total_amount || 0) : sum, 0
+        r.budget_type === 'CAPEX' ? sum + (r.amount || 0) : sum, 0
       ) || 0
       const opexAmount = totalAmount - capexAmount
 
       const { count: pendingApprovals } = await supabase
-        .from('approvals')
+        .from('approval_actions')
         .select('*', { count: 'exact', head: true })
-        .eq('approver_id', user?.id)
-        .eq('status', 'pending')
+        .eq('approver_email', user?.email)
+        .eq('action', 'pending')
 
       setStats({
         totalRequests,
@@ -141,8 +141,8 @@ export default function Dashboard() {
           monthlyMap.set(monthName, { month: monthName, actual: 0, forecast: 0 })
         }
         const entry = monthlyMap.get(monthName)!
-        entry.actual += r.total_amount || 0
-        entry.forecast += (r.total_amount || 0) * 1.1
+        entry.actual += r.amount || 0
+        entry.forecast += (r.amount || 0) * 1.1
       })
 
       setMonthlySpend(Array.from(monthlyMap.values()))
@@ -153,12 +153,12 @@ export default function Dashboard() {
         if (!entityMap.has(entityCode)) {
           entityMap.set(entityCode, { name: entityCode, amount: 0 })
         }
-        entityMap.get(entityCode)!.amount += r.total_amount || 0
+        entityMap.get(entityCode)!.amount += r.amount || 0
       })
       setSpendByEntity(Array.from(entityMap.values()).sort((a, b) => b.amount - a.amount).slice(0, 8))
 
       const aging: AgingItem[] = (requests || [])
-        .filter(r => r.status === 'in_review')
+        .filter(r => r.status === 'Pending')
         .map(r => {
           const daysPending = Math.floor((Date.now() - new Date(r.submitted_at || r.created_at).getTime()) / (1000 * 3600 * 24))
           return {
@@ -167,7 +167,7 @@ export default function Dashboard() {
             entity: r.legal_entity?.name?.split(' ').slice(0, 2).join(' ') || '',
             awaiting: r.current_approver || 'Line Manager',
             daysPending,
-            amount: r.total_amount || 0,
+            amount: r.amount || 0,
             currency: r.currency
           }
         })
@@ -207,7 +207,8 @@ export default function Dashboard() {
     )
   }
 
-  const chartColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
+  // Chart colors using Tailwind theme colors
+  const chartColors = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))']
 
   return (
     <div className="space-y-6">
@@ -268,10 +269,10 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="month" stroke="#6b7280" />
                 <YAxis stroke="#6b7280" />
-                <Tooltip formatter={(value) => `$${(Number(value) / 1000).toFixed(0)}K`} />
+                <Tooltip formatter={(value: number) => `$${(value / 1000).toFixed(0)}K`} />
                 <Legend />
-                <Area type="monotone" dataKey="actual" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} name="Actual Spend" />
-                <Area type="monotone" dataKey="forecast" stroke="#10b981" fill="#10b981" fillOpacity={0.3} name="Forecast" />
+                <Area type="monotone" dataKey="actual" stroke="hsl(var(--chart-1))" fill="hsl(var(--chart-1))" fillOpacity={0.3} name="Actual Spend" />
+                <Area type="monotone" dataKey="forecast" stroke="hsl(var(--chart-2))" fill="hsl(var(--chart-2))" fillOpacity={0.3} name="Forecast" />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
@@ -288,7 +289,7 @@ export default function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis type="number" stroke="#6b7280" />
                 <YAxis type="category" dataKey="name" width={100} stroke="#6b7280" />
-                <Tooltip formatter={(value) => `$${(Number(value) / 1000).toFixed(0)}K`} />
+                <Tooltip formatter={(value: number) => `$${(value / 1000).toFixed(0)}K`} />
                 <Bar dataKey="amount">
                   {spendByEntity.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
@@ -318,23 +319,23 @@ export default function Dashboard() {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }) => `${name ?? ''}: ${((percent ?? 0) * 100).toFixed(0)}%`}
+                  label={({ name, percent }: { name: string; percent: number }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                   outerRadius={80}
                   dataKey="value"
                 >
-                  <Cell fill="#3b82f6" />
-                  <Cell fill="#10b981" />
+                  <Cell fill="hsl(var(--chart-1))" />
+                  <Cell fill="hsl(var(--chart-2))" />
                 </Pie>
-                <Tooltip formatter={(value) => `$${(Number(value) / 1000).toFixed(0)}K`} />
+                <Tooltip formatter={(value: number) => `$${(value / 1000).toFixed(0)}K`} />
               </RePieChart>
             </ResponsiveContainer>
             <div className="flex justify-center gap-4 mt-4">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                <div className="w-3 h-3 rounded-full bg-chart-1"></div>
                 <span className="text-sm">CAPEX: ${(stats.capexAmount / 1000).toFixed(0)}K</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                <div className="w-3 h-3 rounded-full bg-chart-2"></div>
                 <span className="text-sm">OPEX: ${(stats.opexAmount / 1000).toFixed(0)}K</span>
               </div>
             </div>
@@ -364,7 +365,7 @@ export default function Dashboard() {
                 <XAxis dataKey="week" stroke="#6b7280" />
                 <YAxis stroke="#6b7280" />
                 <Tooltip />
-                <Area type="monotone" dataKey="days" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.3} />
+                <Area type="monotone" dataKey="days" stroke="hsl(var(--chart-5))" fill="hsl(var(--chart-5))" fillOpacity={0.3} />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
