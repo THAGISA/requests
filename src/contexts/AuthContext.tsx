@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadProfile = async (userId: string, userEmail: string): Promise<Profile | null> => {
     try {
       console.log('Loading profile for user:', userId);
-      
+
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -59,18 +59,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         full_name: userEmail.split('@')[0],
         role: 'submitter',
       };
-      
+
       const { data: insertedProfile, error: insertError } = await supabase
         .from('profiles')
         .insert(newProfile)
         .select()
         .single();
-      
+
       if (insertError) {
         console.error('Profile creation error:', insertError);
         return null;
       }
-      
+
       console.log('Profile created:', insertedProfile.role);
       setProfile(insertedProfile);
       return insertedProfile;
@@ -83,10 +83,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    // Simplified initAuth - just let onAuthStateChange handle everything
     const initAuth = async () => {
-      // The onAuthStateChange will handle INITIAL_SESSION
-      // This avoids race conditions
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (isMounted) {
+          if (session?.user) {
+            console.log('Session found:', session.user.email);
+            setUser(session.user);
+            await loadProfile(session.user.id, session.user.email || '');
+          } else {
+            console.log('No session found');
+            setUser(null);
+            setProfile(null);
+          }
+        }
+      } catch (err) {
+        console.error('Auth init error:', err);
+        if (isMounted) {
+          setUser(null);
+          setProfile(null);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          console.log('Auth initialization complete');
+        }
+      }
     };
 
     initAuth();
@@ -96,28 +119,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!isMounted) return;
 
+      // Skip INITIAL_SESSION — initAuth already handled it
+      if (event === 'INITIAL_SESSION') return;
+
       if (event === 'SIGNED_IN' && session?.user) {
         console.log('User signed in:', session.user.email);
         setUser(session.user);
         await loadProfile(session.user.id, session.user.email || '');
+        if (isMounted) setLoading(false);
       } else if (event === 'SIGNED_OUT') {
         console.log('User signed out');
         setUser(null);
         setProfile(null);
-      } else if (event === 'INITIAL_SESSION') {
-        if (!session) {
-          console.log('No initial session');
-          setUser(null);
-          setProfile(null);
-        } else if (session.user) {
-          console.log('Initial session user:', session.user.email);
-          setUser(session.user);
-          await loadProfile(session.user.id, session.user.email || '');
-        }
-      }
-
-      if (isMounted) {
-        setLoading(false);
+        if (isMounted) setLoading(false);
+      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+        // Silent token refresh — update user but don't flash loading
+        setUser(session.user);
       }
     });
 
