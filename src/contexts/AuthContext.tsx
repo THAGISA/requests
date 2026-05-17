@@ -31,15 +31,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string, email: string) => {
-    const fallbackProfile: Profile = {
-      id: userId,
-      email,
-      full_name: email.split('@')[0],
-      role: 'submitter',
-    };
-
+  const loadProfile = async (userId: string, userEmail: string): Promise<Profile | null> => {
     try {
+      console.log('Loading profile for user:', userId);
+      
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -48,87 +43,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (profileError) {
         console.error('Profile fetch error:', profileError);
-        setProfile(fallbackProfile);
-        return;
+        return null;
       }
 
       if (profileData) {
+        console.log('Profile loaded from DB:', profileData.role);
         setProfile(profileData);
-        return;
+        return profileData;
       }
 
-      const { data: newProfile, error: insertError } = await supabase
+      console.log('Creating new profile with submitter role');
+      const newProfile = {
+        id: userId,
+        email: userEmail,
+        full_name: userEmail.split('@')[0],
+        role: 'submitter',
+      };
+      
+      const { data: insertedProfile, error: insertError } = await supabase
         .from('profiles')
-        .insert(fallbackProfile)
+        .insert(newProfile)
         .select()
         .single();
-
+      
       if (insertError) {
         console.error('Profile creation error:', insertError);
-        setProfile(fallbackProfile);
-        return;
+        return null;
       }
-
-      setProfile(newProfile || fallbackProfile);
+      
+      console.log('Profile created:', insertedProfile.role);
+      setProfile(insertedProfile);
+      return insertedProfile;
     } catch (err) {
-      console.error('Profile fetch exception:', err);
-      setProfile(fallbackProfile);
+      console.error('Profile load error:', err);
+      return null;
     }
   };
 
   useEffect(() => {
     let isMounted = true;
 
+    // Simplified initAuth - just let onAuthStateChange handle everything
     const initAuth = async () => {
-      try {
-        // Handle the OAuth callback
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          console.error('Session error:', sessionError);
-        }
-
-        if (isMounted) {
-          if (session?.user) {
-            console.log('User found in session:', session.user.email);
-            setUser(session.user);
-            await fetchProfile(session.user.id, session.user.email || '');
-          } else {
-            console.log('No session found');
-            setUser(null);
-            setProfile(null);
-          }
-        }
-      } catch (err) {
-        console.error('Auth init error:', err);
-        if (isMounted) {
-          setUser(null);
-          setProfile(null);
-        }
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+      // The onAuthStateChange will handle INITIAL_SESSION
+      // This avoids race conditions
     };
 
     initAuth();
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth event:', event, session?.user?.email);
-      
-      if (isMounted) {
-        if (event === 'SIGNED_IN' && session?.user) {
-          console.log('User signed in:', session.user.email);
-          setUser(session.user);
-          await fetchProfile(session.user.id, session.user.email || '');
-        } else if (event === 'SIGNED_OUT') {
-          console.log('User signed out');
+      console.log('Auth event:', event);
+
+      if (!isMounted) return;
+
+      if (event === 'SIGNED_IN' && session?.user) {
+        console.log('User signed in:', session.user.email);
+        setUser(session.user);
+        await loadProfile(session.user.id, session.user.email || '');
+      } else if (event === 'SIGNED_OUT') {
+        console.log('User signed out');
+        setUser(null);
+        setProfile(null);
+      } else if (event === 'INITIAL_SESSION') {
+        if (!session) {
+          console.log('No initial session');
           setUser(null);
           setProfile(null);
-        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-          console.log('Token refreshed for:', session.user.email);
+        } else if (session.user) {
+          console.log('Initial session user:', session.user.email);
           setUser(session.user);
+          await loadProfile(session.user.id, session.user.email || '');
         }
+      }
+
+      if (isMounted) {
         setLoading(false);
       }
     });
@@ -140,47 +128,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithAzure = async () => {
-    try {
-      console.log('Starting Azure sign in...');
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'azure',
-        options: {
-          redirectTo: window.location.origin,
-          scopes: 'email openid profile offline_access',
-        }
-      });
-      
-      if (error) {
-        console.error('Azure sign in error:', error);
-        throw error;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: {
+        redirectTo: window.location.origin,
+        scopes: 'email openid profile',
       }
-      
-      console.log('Redirecting to Azure...', data);
-      // The redirect happens automatically
-    } catch (err) {
-      console.error('Sign in error:', err);
-      throw err;
+    });
+    if (error) {
+      console.error('Azure sign in error:', error);
+      throw error;
     }
   };
 
   const signOut = async () => {
-    console.log('Signing out...');
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
-    // Clear any stored data
-    localStorage.clear();
     window.location.href = '/';
   };
 
   const refreshProfile = async () => {
     if (user) {
-      await fetchProfile(user.id, user.email || '');
+      await loadProfile(user.id, user.email || '');
     }
   };
 
   const userRole = profile?.role || 'submitter';
   const isAdmin = userRole === 'admin';
+
+  console.log('Auth state - role:', userRole, 'loading:', loading);
 
   return (
     <AuthContext.Provider

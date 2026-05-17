@@ -48,28 +48,21 @@ export default function Dashboard() {
   const [filterBU, setFilterBU] = useState('all')
   const [filterClass, setFilterClass] = useState('all')
 
-  // Wait for auth to load before fetching data
+  // Debug logging
   useEffect(() => {
-    if (!authLoading && user) {
+    console.log('Dashboard - userRole:', userRole, 'user:', user?.email, 'authLoading:', authLoading)
+  }, [userRole, user, authLoading])
+
+  // Wait for auth to load and role to be available before fetching data
+  useEffect(() => {
+    if (!authLoading && user && userRole) {
+      console.log('Conditions met, fetching requests for role:', userRole)
       fetchRequests()
     } else if (!authLoading && !user) {
+      console.log('No user, setting loading false')
       setLoading(false)
     }
   }, [user, userRole, authLoading])
-
-  // Add timeout to prevent infinite loading
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout
-    
-    if (loading && !authLoading) {
-      timeoutId = setTimeout(() => {
-        console.log('Loading timeout, forcing loading false')
-        setLoading(false)
-      }, 10000)
-    }
-    
-    return () => clearTimeout(timeoutId)
-  }, [loading, authLoading])
 
   const fetchRequests = async () => {
     setLoading(true)
@@ -113,6 +106,7 @@ export default function Dashboard() {
           
         case 'admin':
           console.log('Admin view - showing all requests')
+          // Admins see everything
           break
           
         default:

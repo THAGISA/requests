@@ -12,10 +12,11 @@ import ViewRequest from "@/pages/ViewRequest"
 import Login from "@/pages/Login"
 
 function AppRoutes() {
-  const { user, loading } = useAuth()
+  const { user, loading, userRole } = useAuth()
 
-  console.log('AppRoutes - user:', user?.email, 'loading:', loading)
+  console.log('AppRoutes - user:', user?.email, 'loading:', loading, 'role:', userRole)
 
+  // Show loading spinner while auth is initializing
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">

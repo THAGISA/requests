@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { 
   CheckCircle2, XCircle, Clock, RotateCcw, 
   Building2, DollarSign, Calendar,
-  MessageSquare, Loader2
+  MessageSquare, Loader2, User
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
@@ -21,7 +21,7 @@ interface ApprovalRequest {
   approver_email: string
   action: string
   comments: string
-  approval_created_at: string
+  created_at: string
   request_number: string
   title: string
   description: string
@@ -30,14 +30,12 @@ interface ApprovalRequest {
   budget_type: string
   business_unit: string
   status: string
-  request_created_at: string
 }
 
 export default function ApprovalsInbox() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequest[]>([])
-  const [actionedApprovals, setActionedApprovals] = useState<ApprovalRequest[]>([])
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([])
   const [activeTab, setActiveTab] = useState('pending')
   const [selectedRequest, setSelectedRequest] = useState<ApprovalRequest | null>(null)
   const [showDecisionDialog, setShowDecisionDialog] = useState(false)
@@ -45,10 +43,17 @@ export default function ApprovalsInbox() {
   const [decisionComments, setDecisionComments] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  useEffect(() => {
+    if (user) {
+      fetchApprovals()
+    }
+  }, [user])
+
   const fetchApprovals = async () => {
     setLoading(true)
     try {
-      const { data: approvals, error: approvalsError } = await supabase
+      // Get all approval actions for the current user
+      const { data: approvalsData, error: approvalsError } = await supabase
         .from('approval_actions')
         .select('*')
         .eq('approver_email', user?.email)
@@ -56,28 +61,28 @@ export default function ApprovalsInbox() {
       
       if (approvalsError) throw approvalsError
       
-      if (!approvals || approvals.length === 0) {
-        setPendingApprovals([])
-        setActionedApprovals([])
+      if (!approvalsData || approvalsData.length === 0) {
+        setApprovals([])
         setLoading(false)
         return
       }
       
-      const requestIds = approvals.map(a => a.request_id)
-      const { data: requests, error: reqError } = await supabase
+      // Get the associated funding requests
+      const requestIds = approvalsData.map(a => a.request_id)
+      const { data: requestsData, error: reqError } = await supabase
         .from('funding_requests')
-        .select('id, request_number, title, description, amount, currency, budget_type, business_unit, status, created_at')
+        .select('id, request_number, title, description, amount, currency, budget_type, business_unit, status')
         .in('id', requestIds)
       
       if (reqError) throw reqError
       
-      const combined = approvals.map(approval => {
-        const request = requests?.find(r => r.id === approval.request_id)
+      // Combine the data
+      const combined = approvalsData.map(approval => {
+        const request = requestsData?.find(r => r.id === approval.request_id)
         if (!request) return null
         
         return {
           ...approval,
-          approval_created_at: approval.created_at,
           request_number: request.request_number,
           title: request.title,
           description: request.description,
@@ -86,15 +91,11 @@ export default function ApprovalsInbox() {
           budget_type: request.budget_type,
           business_unit: request.business_unit,
           status: request.status,
-          request_created_at: request.created_at
         }
       }).filter(Boolean) as ApprovalRequest[]
       
-      const pending = combined.filter(a => a.action === 'pending')
-      const actioned = combined.filter(a => a.action !== 'pending')
-      
-      setPendingApprovals(pending)
-      setActionedApprovals(actioned)
+      console.log('Combined approvals:', combined)
+      setApprovals(combined)
     } catch (err) {
       console.error('Error fetching approvals:', err)
       toast.error('Failed to load approvals')
@@ -102,12 +103,6 @@ export default function ApprovalsInbox() {
       setLoading(false)
     }
   }
-
-  useEffect(() => {
-    if (user) {
-      fetchApprovals()
-    }
-  }, [user])
 
   const getDaysPending = (createdAt: string) => {
     const created = new Date(createdAt)
@@ -127,6 +122,7 @@ export default function ApprovalsInbox() {
     
     setSubmitting(true)
     try {
+      // Update the approval action
       const { error: updateError } = await supabase
         .from('approval_actions')
         .update({
@@ -137,6 +133,7 @@ export default function ApprovalsInbox() {
       
       if (updateError) throw updateError
       
+      // Update the funding request status
       let newStatus = selectedRequest.status
       if (decisionAction === 'approved') {
         newStatus = 'Approved'
@@ -170,8 +167,11 @@ export default function ApprovalsInbox() {
     setShowDecisionDialog(true)
   }
 
+  const pendingApprovals = approvals.filter(a => a.action === 'pending')
+  const actionedApprovals = approvals.filter(a => a.action !== 'pending')
+
   const ApprovalCard = ({ approval }: { approval: ApprovalRequest }) => {
-    const daysPending = getDaysPending(approval.approval_created_at)
+    const daysPending = getDaysPending(approval.created_at)
     const isPending = approval.action === 'pending'
     
     return (
@@ -211,17 +211,17 @@ export default function ApprovalsInbox() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-4">
                 <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-gray-400" />
+                  <User className="w-4 h-4 text-gray-400" />
                   <div>
-                    <p className="text-xs text-gray-400">Submitted</p>
-                    <p className="font-medium">{format(new Date(approval.request_created_at), 'PPP')}</p>
+                    <p className="text-xs text-gray-400">Requester</p>
+                    <p className="font-medium">{approval.approver_email}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-gray-400" />
+                  <Calendar className="w-4 h-4 text-gray-400" />
                   <div>
-                    <p className="text-xs text-gray-400">Classification</p>
-                    <p className="font-medium">{approval.budget_type}</p>
+                    <p className="text-xs text-gray-400">Submitted</p>
+                    <p className="font-medium">{format(new Date(approval.created_at), 'PPP')}</p>
                   </div>
                 </div>
               </div>
