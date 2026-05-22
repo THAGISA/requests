@@ -1,131 +1,160 @@
-import { useRef } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useCallback, useState } from 'react'
+import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
-import { Upload, FileText, X, File, Image, FileSpreadsheet } from 'lucide-react'
+import { Progress } from '@/components/ui/progress'
+import { Upload, File, X, CheckCircle2, AlertCircle } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 interface AttachmentsSectionProps {
-  files: File[]
-  onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
-  onRemoveFile: (index: number) => void
+  attachments: File[]
+  updateFormData: (field: string, value: any) => void
 }
 
-const getFileIcon = (filename: string) => {
-  const ext = filename.split('.').pop()?.toLowerCase()
-  if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext || '')) return Image
-  if (['xlsx', 'xls', 'csv'].includes(ext || '')) return FileSpreadsheet
-  if (['pdf', 'doc', 'docx'].includes(ext || '')) return FileText
-  return File
+interface UploadingFile {
+  file: File
+  progress: number
+  status: 'uploading' | 'success' | 'error'
+  url?: string
 }
 
-const formatFileSize = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
+export function AttachmentsSection({ attachments, updateFormData }: AttachmentsSectionProps) {
+  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([])
 
-export function AttachmentsSection({ files, onFileUpload, onRemoveFile }: AttachmentsSectionProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    const newFiles = acceptedFiles.map(file => ({
+      file,
+      progress: 0,
+      status: 'uploading' as const
+    }))
+    setUploadingFiles(prev => [...prev, ...newFiles])
+    updateFormData('attachments', [...attachments, ...acceptedFiles])
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
+    // Simulate upload progress (in production, upload to Supabase storage)
+    for (const uploadFile of newFiles) {
+      for (let progress = 0; progress <= 100; progress += 10) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+        setUploadingFiles(prev =>
+          prev.map(f =>
+            f.file === uploadFile.file ? { ...f, progress } : f
+          )
+        )
+      }
+      setUploadingFiles(prev =>
+        prev.map(f =>
+          f.file === uploadFile.file ? { ...f, status: 'success' } : f
+        )
+      )
+    }
+  }, [attachments, updateFormData])
+
+  const removeFile = (index: number) => {
+    const newAttachments = attachments.filter((_, i) => i !== index)
+    updateFormData('attachments', newAttachments)
+    setUploadingFiles(prev => prev.filter((_, i) => i !== index))
   }
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const dt = e.dataTransfer
-    if (dt.files && dt.files.length > 0) {
-      const syntheticEvent = { target: { files: dt.files } } as React.ChangeEvent<HTMLInputElement>
-      onFileUpload(syntheticEvent)
-    }
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/png': ['.png']
+    },
+    maxSize: 25 * 1024 * 1024 // 25MB
+  })
+
+  const getFileIcon = (fileName: string) => {
+    const ext = fileName.split('.').pop()?.toLowerCase()
+    if (ext === 'pdf') return '📄'
+    if (ext === 'docx') return '📝'
+    if (ext === 'xlsx') return '📊'
+    if (['jpg', 'jpeg', 'png'].includes(ext || '')) return '🖼️'
+    return '📎'
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Supporting Documents</CardTitle>
-        <CardDescription>
-          Upload quotes, contracts, invoices, or any relevant supporting documents
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-
-        {/* Drop zone */}
-        <div
-          className="border-2 border-dashed border-gray-300 rounded-lg p-10 text-center hover:border-blue-400 hover:bg-blue-50 transition-colors cursor-pointer"
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          onClick={() => inputRef.current?.click()}
-        >
-          <Upload className="w-10 h-10 mx-auto text-gray-400 mb-3" />
-          <p className="text-gray-700 font-medium mb-1">Drop files here or click to browse</p>
-          <p className="text-xs text-gray-500">PDF, DOCX, XLSX, PNG, JPG — max 25MB each</p>
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-4"
-            onClick={e => { e.stopPropagation(); inputRef.current?.click() }}
-          >
-            Select Files
-          </Button>
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={onFileUpload}
-          />
+    <div className="space-y-6">
+      <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors">
+        <div {...getRootProps()} className="cursor-pointer">
+          <input {...getInputProps()} />
+          <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          {isDragActive ? (
+            <p className="text-blue-600">Drop files here...</p>
+          ) : (
+            <>
+              <p className="text-gray-600">Drop files here or click to browse</p>
+              <p className="text-sm text-gray-400 mt-1">
+                PDF, DOCX, XLSX, PNG, JPG — max 25MB each
+              </p>
+            </>
+          )}
         </div>
+      </div>
 
-        {/* File list */}
-        {files.length > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-semibold text-gray-700">
-                Attached files ({files.length})
-              </h4>
-              <span className="text-xs text-gray-500">
-                {formatFileSize(files.reduce((sum, f) => sum + f.size, 0))} total
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              {files.map((file, i) => {
-                const Icon = getFileIcon(file.name)
-                return (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors group"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded bg-blue-100 flex items-center justify-center flex-shrink-0">
-                        <Icon className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
-                        <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-red-600"
-                      onClick={() => onRemoveFile(i)}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
+      {/* Uploading Files */}
+      {uploadingFiles.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="font-medium text-gray-900">Uploading</h4>
+          {uploadingFiles.map((item, idx) => (
+            <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+              <div className="text-2xl">{getFileIcon(item.file.name)}</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{item.file.name}</p>
+                <p className="text-xs text-gray-500">
+                  {(item.file.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+                {item.status === 'uploading' && (
+                  <Progress value={item.progress} className="h-1 mt-2" />
+                )}
+                {item.status === 'success' && (
+                  <div className="flex items-center gap-1 mt-1">
+                    <CheckCircle2 className="w-3 h-3 text-green-600" />
+                    <span className="text-xs text-green-600">Uploaded</span>
                   </div>
-                )
-              })}
+                )}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => removeFile(idx)}
+                disabled={item.status === 'uploading'}
+              >
+                <X className="w-4 h-4" />
+              </Button>
             </div>
-          </div>
-        )}
+          ))}
+        </div>
+      )}
 
-        {files.length === 0 && (
-          <p className="text-center text-xs text-gray-400">No files attached yet</p>
-        )}
-      </CardContent>
-    </Card>
+      {/* Uploaded Files */}
+      {attachments.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="font-medium text-gray-900">Attached Files</h4>
+          {attachments.map((file, idx) => (
+            <div key={idx} className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+              <div className="text-2xl">{getFileIcon(file.name)}</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{file.name}</p>
+                <p className="text-xs text-gray-500">
+                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => removeFile(idx)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {attachments.length === 0 && uploadingFiles.length === 0 && (
+        <div className="text-center py-8">
+          <File className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+          <p className="text-sm text-gray-400">No files attached yet</p>
+        </div>
+      )}
+    </div>
   )
 }

@@ -23,12 +23,12 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'My Requests', href: '/my-requests', icon: FileText },
+  { name: 'CAPEX Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'My CAPEX Requests', href: '/my-requests', icon: FileText },
   { name: 'Approvals Inbox', href: '/approvals', icon: Inbox },
-  { name: 'New Request', href: '/new-request', icon: CircleDollarSign },
-  { name: 'Reports', href: '/reports', icon: BarChart3 },
-  { name: 'Admin', href: '/admin', icon: Settings },
+  { name: 'New CAPEX Request', href: '/new-request', icon: CircleDollarSign },
+  { name: 'Reports & Analytics', href: '/reports', icon: BarChart3 },
+  { name: 'Admin Panel', href: '/admin', icon: Settings },
 ]
 
 interface LayoutProps {
@@ -58,7 +58,7 @@ export function Layout({ children }: LayoutProps) {
               <CircleDollarSign className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gray-900">Funding Portal</h1>
+              <h1 className="text-lg font-bold text-gray-900">CAPEX Portal</h1>
               <p className="text-xs text-gray-500">SEACOM</p>
             </div>
           </div>
